@@ -567,6 +567,7 @@ class Tacotron2(nn.Module):
             hparams.n_speakers, hparams.speaker_embedding_dim)
         if hparams.with_tpse:
             self.tpse = TPSE_GST(hparams)
+            print(self.tpse.parameters)
 
     def parse_batch(self, batch):
         text_padded, input_lengths, mel_padded, gate_padded, \
@@ -606,7 +607,7 @@ class Tacotron2(nn.Module):
         embedded_gst = self.gst(targets)
         embedded_gst_single = embedded_gst.clone()
         embedded_gst = embedded_gst_single.repeat(1, embedded_text.size(1), 1) # Repeats GST for length of embedded
-        embedded_tpse_gst = self.tpse(embedded_text)
+        embedded_tpse_gst = self.tpse((embedded_text, f0s))
         embedded_speakers = embedded_speakers.repeat(1, embedded_text.size(1), 1)
 
         encoder_outputs = torch.cat(
@@ -629,7 +630,7 @@ class Tacotron2(nn.Module):
         embedded_speakers = self.speaker_embedding(speaker_ids)[:, None]
         if hasattr(self, 'gst'):
             if with_tpse:
-                embedded_gst = self.tpse(embedded_text)
+                embedded_gst = self.tpse((embedded_text, f0s))
             else:
                 if isinstance(style_input, int):
                     query = torch.zeros(1, 1, self.gst.encoder.ref_enc_gru_size).cuda()
@@ -664,7 +665,7 @@ class Tacotron2(nn.Module):
         embedded_speakers = self.speaker_embedding(speaker_ids)[:, None]
         if hasattr(self, 'gst'):
             if with_tpse:
-                embedded_gst = self.tpse(embedded_text)
+                embedded_gst = self.tpse((embedded_text, f0s))
             else:
                 if isinstance(style_input, int):
                     query = torch.zeros(1, 1, self.gst.encoder.ref_enc_gru_size).cuda()

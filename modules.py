@@ -159,12 +159,16 @@ class TPSE_GST(nn.Module):
     def __init__(self, hp):
         super().__init__()
         # Define TPSE-GST Network
-        self.gru = nn.GRU(hp.encoder_embedding_dim,
+        self.text_gru = nn.GRU(hp.encoder_embedding_dim,
                           hp.tp_gst_gru_dim, 1,
                           batch_first=True, bidirectional=True)
 
-        self.tpse_layers = [nn.Linear(in_features=hp.tp_gst_gru_dim*2,
-                                      out_features=hp.tpse_units[0]).to('cuda:0')]
+        self.f0_gru = nn.GRU(1,
+                          hp.tp_gst_gru_dim, 1,
+                          batch_first=True, bidirectional=True)
+
+        self.tpse_layers = nn.ModuleList([nn.Linear(in_features=hp.tp_gst_gru_dim*4,
+                                                     out_features=hp.tpse_units[0]).to('cuda:0')])
         for i in range(len(hp.tpse_units) - 1):
             self.tpse_layers.append(nn.Linear(in_features=hp.tpse_units[i],
                                               out_features=hp.tpse_units[i + 1]).to('cuda:0'))
@@ -172,9 +176,12 @@ class TPSE_GST(nn.Module):
                                           out_features=hp.token_embedding_size).to('cuda:0'))
 
     def forward(self, inputs):
-        embedded_text = inputs
-        outputs, _ = self.gru(embedded_text.detach())
-        t = outputs[:,-1]
+        embedded_text, f0s = inputs
+        text_outputs, _ = self.text_gru(embedded_text.detach())
+
+        
+        f0_outputs, _ = self.f0_gru(f0s.detach().squeeze(dim=1).unsqueeze(dim=2))
+        t = torch.cat((text_outputs[:,-1], f0_outputs[:,-1]), dim=1)
 
         for layer in self.tpse_layers[:-1]:
             t = layer(t)

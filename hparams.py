@@ -36,7 +36,7 @@ def create_hparams(hparams_string=None, verbose=False):
         # Audio Parameters             #
         ################################
         max_wav_value=32768.0,
-        sampling_rate=24000, #2400 for libritts, 22050 for ljs
+        sampling_rate=24000, #24000 for libritts, 22050 for ljs
         filter_length=1024,
         hop_length=256,
         win_length=1024,
