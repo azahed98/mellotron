@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 
 from model import load_model
 from data_utils import TextMelLoader, TextMelCollate
-from loss_function import Tacotron2Loss
+from loss_function import Tacotron2Loss, TPSELoss
 from logger import Tacotron2Logger
 from hparams import create_hparams
 
@@ -133,7 +133,7 @@ def validate(model, criterion, valset, iteration, batch_size, n_gpus,
     model.train()
     if rank == 0:
         print("Validation loss {}: {:9f}  ".format(iteration, reduced_val_loss))
-        logger.log_validation(val_loss, model, y, y_pred, iteration)
+        logger.log_validation(val_loss, model, y, y_pred[:4], iteration)
 
 
 def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
@@ -169,6 +169,8 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
         model = apply_gradient_allreduce(model)
 
     criterion = Tacotron2Loss()
+    if hparams.with_tpse:
+        tpse_loss = TPSELoss()
 
     logger = prepare_directories_and_logger(
         output_directory, log_directory, rank)
@@ -210,6 +212,9 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
             y_pred = model(x)
 
             loss = criterion(y_pred, y)
+            if hparams.with_tpse:
+                loss += tpse_loss(y_pred)
+
             if hparams.distributed_run:
                 reduced_loss = reduce_tensor(loss.data, n_gpus).item()
             else:

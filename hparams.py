@@ -24,8 +24,10 @@ def create_hparams(hparams_string=None, verbose=False):
         ################################
         # Data Parameters             #
         ################################
-        training_files='filelists/ljs_audiopaths_text_sid_train_filelist.txt',
-        validation_files='filelists/ljs_audiopaths_text_sid_val_filelist.txt',
+        # training_files='filelists/ljs_audiopaths_text_sid_train_filelist.txt',
+        # validation_files='filelists/ljs_audiopaths_text_sid_val_filelist.txt',
+        training_files='filelists/libritts_train_clean_100_audiopath_text_sid_shorterthan10s_atleast5min_train_filelist.txt',
+        validation_files='filelists/libritts_train_clean_100_audiopath_text_sid_atleast5min_val_filelist.txt',
         text_cleaners=['english_cleaners'],
         p_arpabet=1.0,
         cmudict_path="data/cmu_dictionary",
@@ -34,7 +36,7 @@ def create_hparams(hparams_string=None, verbose=False):
         # Audio Parameters             #
         ################################
         max_wav_value=32768.0,
-        sampling_rate=22050,
+        sampling_rate=24000, #2400 for libritts, 22050 for ljs
         filter_length=1024,
         hop_length=256,
         win_length=1024,
@@ -110,9 +112,15 @@ def create_hparams(hparams_string=None, verbose=False):
         learning_rate_anneal=50000,
         weight_decay=1e-6,
         grad_clip_thresh=1.0,
-        batch_size=32,
+        batch_size=16,
         mask_padding=True,  # set model's padded outputs to padded values
 
+        ################################
+        # TP-GST Parameters #
+        ################################
+        with_tpse=True,
+        tp_gst_gru_dim=64,
+        tpse_units = [512, 512, 512, 256],
     )
 
     if hparams_string:

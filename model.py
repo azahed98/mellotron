@@ -7,7 +7,7 @@ from torch import nn
 from torch.nn import functional as F
 from layers import ConvNorm, LinearNorm
 from utils import to_gpu, get_mask_from_lengths
-from modules import GST
+from modules import GST, TPSE_GST
 
 drop_rate = 0.5
 
@@ -565,6 +565,8 @@ class Tacotron2(nn.Module):
             self.gst = GST(hparams)
         self.speaker_embedding = nn.Embedding(
             hparams.n_speakers, hparams.speaker_embedding_dim)
+        if hparams.with_tpse:
+            self.tpse = TPSE_GST(hparams)
 
     def parse_batch(self, batch):
         text_padded, input_lengths, mel_padded, gate_padded, \
@@ -602,7 +604,9 @@ class Tacotron2(nn.Module):
         embedded_text = self.encoder(embedded_inputs, input_lengths)
         embedded_speakers = self.speaker_embedding(speaker_ids)[:, None]
         embedded_gst = self.gst(targets)
-        embedded_gst = embedded_gst.repeat(1, embedded_text.size(1), 1)
+        embedded_gst_single = embedded_gst.clone()
+        embedded_gst = embedded_gst_single.repeat(1, embedded_text.size(1), 1) # Repeats GST for length of embedded
+        embedded_tpse_gst = self.tpse(embedded_text)
         embedded_speakers = embedded_speakers.repeat(1, embedded_text.size(1), 1)
 
         encoder_outputs = torch.cat(
@@ -615,7 +619,7 @@ class Tacotron2(nn.Module):
         mel_outputs_postnet = mel_outputs + mel_outputs_postnet
 
         return self.parse_output(
-            [mel_outputs, mel_outputs_postnet, gate_outputs, alignments],
+            [mel_outputs, mel_outputs_postnet, gate_outputs, alignments, embedded_gst_single, embedded_tpse_gst],
             output_lengths)
 
     def inference(self, inputs):
@@ -624,13 +628,16 @@ class Tacotron2(nn.Module):
         embedded_text = self.encoder.inference(embedded_inputs)
         embedded_speakers = self.speaker_embedding(speaker_ids)[:, None]
         if hasattr(self, 'gst'):
-            if isinstance(style_input, int):
-                query = torch.zeros(1, 1, self.gst.encoder.ref_enc_gru_size).cuda()
-                GST = torch.tanh(self.gst.stl.embed)
-                key = GST[style_input].unsqueeze(0).expand(1, -1, -1)
-                embedded_gst = self.gst.stl.attention(query, key)
+            if with_tpse:
+                embedded_gst = self.tpse(embedded_text)
             else:
-                embedded_gst = self.gst(style_input)
+                if isinstance(style_input, int):
+                    query = torch.zeros(1, 1, self.gst.encoder.ref_enc_gru_size).cuda()
+                    GST = torch.tanh(self.gst.stl.embed)
+                    key = GST[style_input].unsqueeze(0).expand(1, -1, -1)
+                    embedded_gst = self.gst.stl.attention(query, key)
+                else:
+                    embedded_gst = self.gst(style_input)
 
         embedded_speakers = embedded_speakers.repeat(1, embedded_text.size(1), 1)
         if hasattr(self, 'gst'):
@@ -650,19 +657,22 @@ class Tacotron2(nn.Module):
         return self.parse_output(
             [mel_outputs, mel_outputs_postnet, gate_outputs, alignments])
 
-    def inference_noattention(self, inputs):
+    def inference_noattention(self, inputs, with_tpse=False):
         text, style_input, speaker_ids, f0s, attention_map = inputs
         embedded_inputs = self.embedding(text).transpose(1, 2)
         embedded_text = self.encoder.inference(embedded_inputs)
         embedded_speakers = self.speaker_embedding(speaker_ids)[:, None]
         if hasattr(self, 'gst'):
-            if isinstance(style_input, int):
-                query = torch.zeros(1, 1, self.gst.encoder.ref_enc_gru_size).cuda()
-                GST = torch.tanh(self.gst.stl.embed)
-                key = GST[style_input].unsqueeze(0).expand(1, -1, -1)
-                embedded_gst = self.gst.stl.attention(query, key)
+            if with_tpse:
+                embedded_gst = self.tpse(embedded_text)
             else:
-                embedded_gst = self.gst(style_input)
+                if isinstance(style_input, int):
+                    query = torch.zeros(1, 1, self.gst.encoder.ref_enc_gru_size).cuda()
+                    GST = torch.tanh(self.gst.stl.embed)
+                    key = GST[style_input].unsqueeze(0).expand(1, -1, -1)
+                    embedded_gst = self.gst.stl.attention(query, key)
+                else:
+                    embedded_gst = self.gst(style_input)
 
         embedded_speakers = embedded_speakers.repeat(1, embedded_text.size(1), 1)
         if hasattr(self, 'gst'):

@@ -94,9 +94,9 @@ class STL(nn.Module):
 
     def forward(self, inputs):
         N = inputs.size(0)
-        query = inputs.unsqueeze(1)
+        query = inputs.unsqueeze(1) # [N, 1, ref_enc_gru_size]
         keys = torch.tanh(self.embed).unsqueeze(0).expand(N, -1, -1)  # [N, token_num, token_embedding_size // num_heads]
-        style_embed = self.attention(query, keys)
+        style_embed = self.attention(query, keys) # [N, 1, hp.token_embedding_size]
 
         return style_embed
 
@@ -148,7 +148,38 @@ class GST(nn.Module):
         self.stl = STL(hp)
 
     def forward(self, inputs):
-        enc_out = self.encoder(inputs)
-        style_embed = self.stl(enc_out)
+        """ inputs -  [N, Ty/r, n_mels*r] """
+
+        enc_out = self.encoder(inputs) # [N, ref_enc_gru_size]
+        style_embed = self.stl(enc_out) 
 
         return style_embed
+
+class TPSE_GST(nn.Module):
+    def __init__(self, hp):
+        super().__init__()
+        # Define TPSE-GST Network
+        self.gru = nn.GRU(hp.encoder_embedding_dim,
+                          hp.tp_gst_gru_dim, 1,
+                          batch_first=True, bidirectional=True)
+
+        self.tpse_layers = [nn.Linear(in_features=hp.tp_gst_gru_dim*2,
+                                      out_features=hp.tpse_units[0]).to('cuda:0')]
+        for i in range(len(hp.tpse_units) - 1):
+            self.tpse_layers.append(nn.Linear(in_features=hp.tpse_units[i],
+                                              out_features=hp.tpse_units[i + 1]).to('cuda:0'))
+        self.tpse_layers.append(nn.Linear(in_features=hp.tpse_units[-1],
+                                          out_features=hp.token_embedding_size).to('cuda:0'))
+
+    def forward(self, inputs):
+        embedded_text = inputs
+        outputs, _ = self.gru(embedded_text.detach())
+        t = outputs[:,-1]
+
+        for layer in self.tpse_layers[:-1]:
+            t = layer(t)
+            t = F.relu(t)
+        t = self.tpse_layers[-1](t)
+        t = torch.tanh(t).unsqueeze(1)
+        return t
+
