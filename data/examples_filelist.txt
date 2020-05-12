@@ -1,2 +1,3 @@
 data/example1.wav|exploring the expanses of space to keep our planet safe|1
 data/example2.wav|and all the species that call it home|1
+data/LJ001-0059.wav|the greater part of these Italian printers, it should be mentioned, were Germans or Frenchmen, working under the influence of Italian opinion and aims.|0

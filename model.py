@@ -567,7 +567,6 @@ class Tacotron2(nn.Module):
             hparams.n_speakers, hparams.speaker_embedding_dim)
         if hparams.with_tpse:
             self.tpse = TPSE_GST(hparams)
-            print(self.tpse.parameters)
 
     def parse_batch(self, batch):
         text_padded, input_lengths, mel_padded, gate_padded, \
